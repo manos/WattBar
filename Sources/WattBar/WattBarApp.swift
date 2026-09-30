@@ -7,7 +7,7 @@ struct WattBarApp: App {
         MenuBarExtra {
             PowerPanelView(monitor: monitor)
         } label: {
-            Text(monitor.statusText)
+            Text(monitor.menuBarText)
                 .monospacedDigit()
         }
         .menuBarExtraStyle(.window)

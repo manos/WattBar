@@ -66,6 +66,10 @@ actor SensorSampler {
     /// Rest of System residuals over the last hour, used to estimate the
     /// fixed part of that residual (backlight, SSD, radios) as a floor.
     private var restHistory: [PowerSample] = []
+    /// Whether the previous snapshot swept processes. When app sampling
+    /// resumes after a gap it rebaselines, rather than averaging its first
+    /// estimate over however long it was paused.
+    private var sampledAppsLastSnapshot = false
 
     init() {}
 
@@ -100,6 +104,9 @@ actor SensorSampler {
 
         var apps: [AppPower]?
         if includeApps {
+            if !sampledAppsLastSnapshot {
+                resources.appSampler.reset()
+            }
             let budget = PowerMath.attributableBudget(
                 components: lastComponents,
                 restFloor: PowerMath.restFloor(restHistory.map(\.watts)),
@@ -107,6 +114,7 @@ actor SensorSampler {
             )
             apps = resources.appSampler.sample(budgetWatts: budget, topCount: topCount)
         }
+        sampledAppsLastSnapshot = includeApps
 
         return PowerSnapshot(
             systemWatts: systemWatts,
@@ -125,6 +133,7 @@ actor SensorSampler {
         let resources = loadResources()
         resources.appSampler.reset()
         _ = resources.appSampler.sample(budgetWatts: nil, topCount: topCount)
+        sampledAppsLastSnapshot = true
     }
 
     private func readSources(_ resources: Resources) -> [PowerReading] {

@@ -14,7 +14,7 @@ WattBar exists mainly because iStat Menus can no longer read power sensors on M5
 
 ## Features
 
-- **Live system power** in the menu bar (e.g. `22.5 W`), updating at a configurable interval (0.5s / 1s / 2s / 5s)
+- **Live system power** in the menu bar (e.g. `22W`, or `22.5W` with decimals on), updating at a configurable interval (1s / 5s / 10s / 30s / 60s)
 - **Component breakdown**: CPU, GPU, Neural Engine, Memory, Display, Media Engine, and Fabric & I/O power, with CPU/GPU die temperatures, plus a "Rest of System" residual (display backlight, SSD, radios, conversion losses)
 - **Per-app power estimates**: the activity-driven share of system power (CPU, memory, fabric, and load-dependent overhead) distributed across apps by their share of machine-wide CPU time, including short-lived child processes like compilers, which roll up into their parent app. Apps plus "System & Other" add up to the system total.
 - **Last-hour history**: time-weighted average, peak, and a sparkline chart

@@ -47,13 +47,13 @@ struct PowerPanelView: View {
 
             Picker("Update Every", selection: $monitor.updateInterval) {
                 ForEach(PowerMonitor.intervalOptions, id: \.self) { interval in
-                    Text(interval < 1
-                        ? String(format: "%.1fs", interval)
-                        : String(format: "%.0fs", interval))
-                    .tag(interval)
+                    Text(String(format: "%.0fs", interval))
+                        .tag(interval)
                 }
             }
             .font(.callout)
+
+            Toggle("Decimals in Menu Bar", isOn: $monitor.showsMenuBarDecimals)
 
             launchAtLoginToggle
 

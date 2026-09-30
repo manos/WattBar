@@ -14,7 +14,13 @@ final class PowerMonitor {
     }
 
     private static let intervalKey = "updateInterval"
-    static let intervalOptions: [TimeInterval] = [0.5, 1, 2, 5]
+    private static let decimalsKey = "showsMenuBarDecimals"
+    static let intervalOptions: [TimeInterval] = [1, 5, 10, 30, 60]
+
+    /// At intervals this long, waiting a whole one after opening the panel for
+    /// a first app estimate is noticeable, so apps are sampled in the
+    /// background as well and the panel opens on the last interval's estimate.
+    private static let backgroundAppInterval: TimeInterval = 5
 
     private(set) var systemWatts: Double?
     private(set) var averageWatts: Double?
@@ -33,20 +39,37 @@ final class PowerMonitor {
     var updateInterval: TimeInterval {
         didSet {
             UserDefaults.standard.set(updateInterval, forKey: Self.intervalKey)
+            // Restart the loop so a new interval applies now, rather than
+            // after the old one's sleep runs out (up to a minute).
+            guard updateInterval != oldValue, pollTask != nil else { return }
+            stop()
+            pollTask = pollLoop(refreshFirst: false)
         }
     }
 
-    /// Per-app sampling sweeps every process, so it only runs while the
-    /// panel is open. Opening the panel takes a fresh baseline.
+    /// The menu bar is short on room, so whole watts by default.
+    var showsMenuBarDecimals: Bool {
+        didSet {
+            UserDefaults.standard.set(showsMenuBarDecimals, forKey: Self.decimalsKey)
+        }
+    }
+
+    /// Per-app sampling sweeps every process. At short intervals it only runs
+    /// while the panel is open, and opening the panel takes a fresh baseline.
+    /// At longer ones it also runs in the background, so the panel opens on
+    /// the last interval's estimate instead of waiting out a new one.
     var isPanelVisible = false {
         didSet {
             guard isPanelVisible, !oldValue else { return }
-            appReadings = []
-            hasAppSample = false
             rebuildChartPoints(now: .now)
+            guard !appsSampledLastRefresh else { return }
             Task { await sampler.resetAppBaseline(topCount: Self.topAppCount) }
         }
     }
+
+    /// Whether the last refresh swept processes, i.e. whether `appReadings`
+    /// is being kept current. When it isn't, it has already been cleared.
+    private var appsSampledLastRefresh = false
 
     private static let topAppCount = 6
     private static let historyWindow: Duration = .seconds(3600)
@@ -59,6 +82,7 @@ final class PowerMonitor {
     init() {
         let stored = UserDefaults.standard.double(forKey: Self.intervalKey)
         updateInterval = Self.intervalOptions.contains(stored) ? stored : 1
+        showsMenuBarDecimals = UserDefaults.standard.bool(forKey: Self.decimalsKey)
         start()
     }
 
@@ -67,10 +91,21 @@ final class PowerMonitor {
         return String(format: "%.1f W", watts)
     }
 
+    /// Compact form of `statusText`: no space before the unit, and decimals
+    /// only when asked for.
+    var menuBarText: String {
+        guard let watts = systemWatts else { return "--W" }
+        return String(format: showsMenuBarDecimals ? "%.1fW" : "%.0fW", watts)
+    }
+
     func start() {
         guard pollTask == nil else { return }
-        pollTask = Task { [weak self] in
-            await self?.refresh()
+        pollTask = pollLoop(refreshFirst: true)
+    }
+
+    private func pollLoop(refreshFirst: Bool) -> Task<Void, Never> {
+        Task { [weak self] in
+            if refreshFirst { await self?.refresh() }
             while true {
                 guard let self else { return }
                 do {
@@ -92,10 +127,18 @@ final class PowerMonitor {
     /// Awaiting the snapshot before sleeping again means a slow sample delays
     /// the next one rather than piling up behind it.
     func refresh() async {
+        let includeApps = isPanelVisible || updateInterval >= Self.backgroundAppInterval
         let snapshot = await sampler.snapshot(
-            includeApps: isPanelVisible, topCount: Self.topAppCount
+            includeApps: includeApps, topCount: Self.topAppCount
         )
         apply(snapshot)
+        appsSampledLastRefresh = includeApps
+        if !includeApps {
+            // Nothing is keeping these current any more; don't let the panel
+            // open on an estimate from whenever sampling last ran.
+            appReadings = []
+            hasAppSample = false
+        }
     }
 
     private func apply(_ snapshot: PowerSnapshot) {
