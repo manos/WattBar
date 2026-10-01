@@ -81,7 +81,18 @@ enum Main {
     }
 
     private static let cliTopCount = 6
-    private static let cliWindow: Duration = .seconds(2)
+    private static let cliWindowSeconds = 2
+
+    /// Reads the power channels once a second across the window, as the app
+    /// does between refreshes; the closing snapshot takes the last reading.
+    private static func sampleWindow(_ sampler: SensorSampler) async {
+        for second in 1...cliWindowSeconds {
+            try? await Task.sleep(for: .seconds(1))
+            if second < cliWindowSeconds {
+                await sampler.sampleChannels()
+            }
+        }
+    }
 
     /// Prints estimated per-app power over a 2-second window, using the
     /// same budget-and-remainder path as the panel: `WattBar --apps`
@@ -89,7 +100,7 @@ enum Main {
         let sampler = SensorSampler()
         await sampler.resetAppBaseline(topCount: cliTopCount)
         _ = await sampler.snapshot(includeApps: true, topCount: cliTopCount)
-        try? await Task.sleep(for: cliWindow)
+        await sampleWindow(sampler)
         let snapshot = await sampler.snapshot(includeApps: true, topCount: cliTopCount)
 
         guard let apps = snapshot.apps else {
@@ -109,7 +120,7 @@ enum Main {
     private static func components() async {
         let sampler = SensorSampler()
         _ = await sampler.snapshot(includeApps: false, topCount: cliTopCount)
-        try? await Task.sleep(for: cliWindow)
+        await sampleWindow(sampler)
         let snapshot = await sampler.snapshot(includeApps: false, topCount: cliTopCount)
 
         guard snapshot.isAvailable else {
@@ -140,14 +151,18 @@ enum Main {
         }
     }
 
-    /// The rows below sum to the interval-aligned total, not the instantaneous
-    /// one: the energy counters they come from are averages over the window.
+    /// The rows below sum to the interval-aligned total, not the window mean:
+    /// the energy counters they come from are averages over the window.
     private static func printTotals(_ snapshot: PowerSnapshot) {
         let format = { (value: Double?) in
             value.map { String(format: "%.2f W", $0) } ?? "unavailable"
         }
-        print("System total (now):", format(snapshot.systemWatts))
+        print("System total (window mean):", format(snapshot.systemWatts))
         print("System total (interval):", format(snapshot.intervalSystemWatts))
+        for source in snapshot.sources {
+            let detail = source.detail.map { " (\($0))" } ?? ""
+            print("\(source.label) (window mean):", format(source.watts) + detail)
+        }
     }
 
     /// Prints every float-typed "P*" (power) sensor the SMC exposes:

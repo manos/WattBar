@@ -157,8 +157,8 @@ struct PowerPanelView: View {
 
     private static let componentTotalHelp = """
     The rows below are averages over the update interval and add up to this \
-    number, which is why they can differ a little from the instantaneous \
-    figure at the top.
+    number, which is aligned to the energy counters' window and so can \
+    differ a little from the figure at the top.
 
     A dimmed total means the sensors briefly disagreed, so WattBar is showing \
     the last set of rows that added up, alongside the total they add up to.

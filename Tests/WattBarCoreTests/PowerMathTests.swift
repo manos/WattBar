@@ -107,6 +107,21 @@ struct ReconciliationTests {
         #expect(PowerMath.intervalAverage(current: nil, previous: 8) == nil)
     }
 
+    @Test("readings inside the interval give the trapezoid mean from the previous one")
+    func intervalAverageOverReadings() {
+        // 8 → 10 → 12 → 14, linear: the true mean over the interval is 11.
+        #expect(PowerMath.intervalAverage(readings: [10, 12, 14], previous: 8) == 11)
+        #expect(PowerMath.intervalAverage(readings: [12], previous: 8) == 10)
+        #expect(PowerMath.intervalAverage(readings: [10, 14], previous: nil) == 12)
+        #expect(PowerMath.intervalAverage(readings: [], previous: 8) == nil)
+    }
+
+    @Test("the mean of an interval's readings, nil when there were none")
+    func meanOfReadings() {
+        #expect(PowerMath.mean([9, 11, 16]) == 12)
+        #expect(PowerMath.mean([]) == nil)
+    }
+
     @Test("components below the total leave a positive residual")
     func componentsBelowTotal() {
         #expect(

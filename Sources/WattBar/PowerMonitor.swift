@@ -83,6 +83,8 @@ final class PowerMonitor {
     private var appsSampledLastRefresh = false
 
     private static let topAppCount = 6
+    /// How often the power channels are read between refreshes.
+    private static let channelSampleInterval: Duration = .seconds(1)
     private static let historyWindow: Duration = .seconds(3600)
 
     private var history: [PowerSample] = []
@@ -127,18 +129,29 @@ final class PowerMonitor {
         pollTask = pollLoop(refreshFirst: true)
     }
 
+    /// Ticks once a second: the power channels are read on every tick, and
+    /// every `updateInterval` ticks a full refresh publishes their means. So
+    /// a long interval shows the whole interval, not one instant of it.
     private func pollLoop(refreshFirst: Bool) -> Task<Void, Never> {
         Task { [weak self] in
             if refreshFirst { await self?.refresh() }
+            var ticksSinceRefresh = 0
             while true {
                 guard let self else { return }
                 do {
-                    try await Task.sleep(for: .seconds(self.updateInterval))
+                    try await Task.sleep(for: Self.channelSampleInterval)
                 } catch {
                     return  // cancelled: no final refresh
                 }
                 guard !Task.isCancelled else { return }
-                await self.refresh()
+                ticksSinceRefresh += 1
+                let ticksPerRefresh = max(1, Int(self.updateInterval.rounded()))
+                if ticksSinceRefresh >= ticksPerRefresh {
+                    ticksSinceRefresh = 0
+                    await self.refresh()
+                } else {
+                    await self.sampler.sampleChannels()
+                }
             }
         }
     }

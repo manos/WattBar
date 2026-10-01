@@ -131,9 +131,24 @@ public enum PowerMath {
     /// consecutive instantaneous totals is the natural estimate of the mean
     /// over the interval between them.
     public static func intervalAverage(current: Double?, previous: Double?) -> Double? {
-        guard let current else { return nil }
-        guard let previous else { return current }
-        return (current + previous) / 2
+        intervalAverage(readings: current.map { [$0] } ?? [], previous: previous)
+    }
+
+    /// The same estimate when the total was also read at evenly spaced points
+    /// inside the interval: the trapezoid mean from the previous interval's
+    /// last reading through `readings`, which is the endpoint average when
+    /// there is just one.
+    public static func intervalAverage(readings: [Double], previous: Double?) -> Double? {
+        guard let last = readings.last else { return nil }
+        let mean = readings.reduce(0, +) / Double(readings.count)
+        guard let previous else { return mean }
+        return mean + (previous - last) / (2 * Double(readings.count))
+    }
+
+    /// Plain mean of the readings taken over an interval; nil when there were
+    /// none.
+    public static func mean(_ readings: [Double]) -> Double? {
+        readings.isEmpty ? nil : readings.reduce(0, +) / Double(readings.count)
     }
 
     /// Power not covered by the SoC energy counters: display backlight, SSD
