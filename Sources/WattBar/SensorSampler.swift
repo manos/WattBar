@@ -9,6 +9,9 @@ struct PowerSnapshot: Sendable {
     let systemWatts: Double?
     let intervalSystemWatts: Double?
     let isAvailable: Bool
+    /// Power flowing into the battery; zero unless charging. Not part of
+    /// `systemWatts`, which is what the machine itself consumes.
+    let chargeWatts: Double
     let sources: [PowerReading]
     /// nil when the energy counters had no interval to average over yet, in
     /// which case the caller keeps its previous breakdown.
@@ -116,11 +119,13 @@ actor SensorSampler {
         }
         sampledAppsLastSnapshot = includeApps
 
+        let battery = resources.battery?.read()
         return PowerSnapshot(
             systemWatts: systemWatts,
             intervalSystemWatts: intervalSystemWatts,
             isAvailable: systemWatts != nil,
-            sources: readSources(resources),
+            chargeWatts: battery?.chargeWatts ?? 0,
+            sources: readSources(resources, battery: battery),
             components: components,
             apps: apps
         )
@@ -136,7 +141,9 @@ actor SensorSampler {
         sampledAppsLastSnapshot = true
     }
 
-    private func readSources(_ resources: Resources) -> [PowerReading] {
+    private func readSources(
+        _ resources: Resources, battery: BatteryInfo.State?
+    ) -> [PowerReading] {
         var sources = Self.sourceChannels.compactMap { channel in
             resources.smc?.readValue(key: channel.key).map {
                 PowerReading(id: channel.key, label: channel.label, watts: $0)
@@ -146,7 +153,7 @@ actor SensorSampler {
         // While charging, PPBR (power drawn from the battery) reads near
         // zero, leaving the adapter's extra output unexplained. Show the
         // charge inflow instead, flagged so the panel can annotate it.
-        if let state = resources.battery?.read(), state.isCharging,
+        if let state = battery, state.isCharging,
            let index = sources.firstIndex(where: { $0.id == "PPBR" }) {
             sources[index] = PowerReading(
                 id: "PPBR",

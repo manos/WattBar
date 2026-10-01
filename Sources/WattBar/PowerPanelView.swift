@@ -13,7 +13,7 @@ struct PowerPanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             if monitor.isAvailable {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("System Power")
+                    Text(monitor.headlineIncludesCharging ? "System + Charging Power" : "System Power")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(monitor.statusText)
@@ -54,6 +54,8 @@ struct PowerPanelView: View {
             .font(.callout)
 
             Toggle("Decimals in Menu Bar", isOn: $monitor.showsMenuBarDecimals)
+            Toggle("Include Charging Power", isOn: $monitor.includesChargingPower)
+                .help("Adds the power flowing into the battery to the total, so it shows what the Mac is pulling rather than what it consumes.")
 
             launchAtLoginToggle
 

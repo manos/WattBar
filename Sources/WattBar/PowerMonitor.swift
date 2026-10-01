@@ -15,6 +15,7 @@ final class PowerMonitor {
 
     private static let intervalKey = "updateInterval"
     private static let decimalsKey = "showsMenuBarDecimals"
+    private static let chargingKey = "includesChargingPower"
     static let intervalOptions: [TimeInterval] = [1, 5, 10, 30, 60]
 
     /// At intervals this long, waiting a whole one after opening the panel for
@@ -23,6 +24,7 @@ final class PowerMonitor {
     private static let backgroundAppInterval: TimeInterval = 5
 
     private(set) var systemWatts: Double?
+    private(set) var chargeWatts: Double = 0
     private(set) var averageWatts: Double?
     private(set) var peakWatts: Double?
     private(set) var thermalState: ProcessInfo.ThermalState = .nominal
@@ -51,6 +53,15 @@ final class PowerMonitor {
     var showsMenuBarDecimals: Bool {
         didSet {
             UserDefaults.standard.set(showsMenuBarDecimals, forKey: Self.decimalsKey)
+        }
+    }
+
+    /// Adds the battery's charge inflow to the headline and menu bar figure.
+    /// History, average, and peak stay system power, so they don't jump
+    /// whenever the charger kicks in.
+    var includesChargingPower: Bool {
+        didSet {
+            UserDefaults.standard.set(includesChargingPower, forKey: Self.chargingKey)
         }
     }
 
@@ -83,18 +94,31 @@ final class PowerMonitor {
         let stored = UserDefaults.standard.double(forKey: Self.intervalKey)
         updateInterval = Self.intervalOptions.contains(stored) ? stored : 1
         showsMenuBarDecimals = UserDefaults.standard.bool(forKey: Self.decimalsKey)
+        includesChargingPower = UserDefaults.standard.bool(forKey: Self.chargingKey)
         start()
     }
 
+    /// Whether the headline currently has charge power added to it, so the
+    /// panel can say so: the rows below add up to system power alone.
+    var headlineIncludesCharging: Bool {
+        includesChargingPower && chargeWatts > 0
+    }
+
+    /// System power, plus the battery's charge inflow when asked for: what
+    /// the machine is pulling in total, rather than what it consumes.
+    private var headlineWatts: Double? {
+        systemWatts.map { $0 + (includesChargingPower ? chargeWatts : 0) }
+    }
+
     var statusText: String {
-        guard let watts = systemWatts else { return "-- W" }
+        guard let watts = headlineWatts else { return "-- W" }
         return String(format: "%.1f W", watts)
     }
 
     /// Compact form of `statusText`: no space before the unit, and decimals
     /// only when asked for.
     var menuBarText: String {
-        guard let watts = systemWatts else { return "--W" }
+        guard let watts = headlineWatts else { return "--W" }
         return String(format: showsMenuBarDecimals ? "%.1fW" : "%.0fW", watts)
     }
 
@@ -143,6 +167,7 @@ final class PowerMonitor {
 
     private func apply(_ snapshot: PowerSnapshot) {
         systemWatts = snapshot.systemWatts
+        chargeWatts = snapshot.chargeWatts
         isAvailable = snapshot.isAvailable
         sources = snapshot.sources
         thermalState = ProcessInfo.processInfo.thermalState
